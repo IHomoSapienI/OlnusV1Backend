@@ -32,7 +32,7 @@ exports.createPurchaseTransaction = async (purchaseData, detailsData, userEmail)
             });
 
             // update stock
-            await inventoryService.addStock(trx, item.supply_id, item.quantity, detail.id, 'PURCHASE');
+           await inventoryService.addStock(trx, 'supply', item.supply_id, item.quantity, detail.id, 'PURCHASE');
         }
 
         // if everything is fine, commit the transaction (COMMIT)
