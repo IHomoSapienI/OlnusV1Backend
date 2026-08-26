@@ -26,7 +26,6 @@ exports.createSale = async (req, res) => {
 // (Opcional) Listar ventas para pruebas
 exports.getSales = async (req, res) => {
     try {
-        console.log("⏳ Intentando conectar a Supabase...");
         const db = require('../database/knex');
         const sales = await db('sales')
             .join('users', 'sales.user_id', 'users.id')

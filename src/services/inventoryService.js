@@ -1,38 +1,66 @@
-exports.addStock = async (trx, supplyId, quantity, referenceDetailId, movementTypeName) => {
-    
-    // 1. Obtener el tipo de movimiento
-    const movementType = await trx('movement_types').select('id').where('name', movementTypeName).first();
-    if (!movementType) throw new Error('Tipo de movimiento no válido');
+// inventoryService.js
+const db = require('../database/knex');
 
-    // 2. Insertar movimiento (Entrada)
-    await trx('inventory_movements').insert({
+// Registra la entrada de stock
+exports.addStock = async (trx, supplyId, quantity, purchaseDetailId, movementType = 'PURCHASE') => {
+    // 1. Buscar el ID del tipo de movimiento
+    const movementTypeRow = await trx('movement_types').where({ name: movementType }).first();
+    if (!movementTypeRow) throw new Error(`Tipo de movimiento ${movementType} no encontrado`);
+
+    // 2. Insertar el movimiento de inventario (cantidad positiva)
+    const [movement] = await trx('inventory_movements').insert({
         supply_id: supplyId,
-        movement_type_id: movementType.id,
-        purchase_detail_id: referenceDetailId, // Si es compra
+        movement_type_id: movementTypeRow.id,
+        purchase_detail_id: purchaseDetailId,
+        sale_detail_id: null,
         quantity: quantity,
-        notes: `Entrada por ${movementTypeName}`
-    });
+        notes: 'Entrada por compra'
+    }).returning('*');
 
-    // 3. Actualizar el current_stock (Usamos raw para sumar de forma segura)
-    // Verificamos si existe el registro de stock, si no, lo creamos.
-    const existingStock = await trx('current_stock').where('supply_id', supplyId).first();
+    // 3. UPSERT en current_stock (Si existe, actualiza. Si no, crea la fila)
+    await trx.raw(`
+        INSERT INTO current_stock (id, supply_id, current_quantity, last_movement_id, updated_at)
+        VALUES (gen_random_uuid(), ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT (supply_id) 
+        DO UPDATE SET 
+            current_quantity = current_stock.current_quantity + EXCLUDED.current_quantity,
+            last_movement_id = EXCLUDED.last_movement_id,
+            updated_at = CURRENT_TIMESTAMP
+    `, [supplyId, quantity, movement.id]);
 
-    if (existingStock) {
-        await trx('current_stock')
-            .where('supply_id', supplyId)
-            .update({
-                current_quantity: trx.raw('current_quantity + ?', [quantity]),
-                updated_at: trx.fn.now()
-            });
-    } else {
-        await trx('current_stock').insert({
-            supply_id: supplyId,
-            current_quantity: quantity
-        });
-    }
+    return movement;
 };
 
-exports.removeStock = async (trx, supplyId, quantity, referenceDetailId, movementTypeName) => {
-    // Similar a addStock, pero la cantidad va negativa y se usa 'SALE'
-    // (Lo implementaremos cuando hagamos la venta)
+// Registra la salida de stock (para ventas o producción)
+exports.removeStock = async (trx, supplyId, quantity, saleDetailId, movementType = 'SALE') => {
+    // 1. Verificar stock actual
+    const stockRow = await trx('current_stock').where({ supply_id: supplyId }).first();
+    if (!stockRow || stockRow.current_quantity < quantity) {
+        throw new Error(`Stock insuficiente del insumo ${supplyId}. Necesita ${quantity} y hay ${stockRow ? stockRow.current_quantity : 0}`);
+    }
+
+    // 2. Buscar el tipo de movimiento
+    const movementTypeRow = await trx('movement_types').where({ name: movementType }).first();
+    if (!movementTypeRow) throw new Error(`Tipo de movimiento ${movementType} no encontrado`);
+
+    // 3. Insertar el movimiento (cantidad NEGATIVA)
+    const [movement] = await trx('inventory_movements').insert({
+        supply_id: supplyId,
+        movement_type_id: movementTypeRow.id,
+        purchase_detail_id: null,
+        sale_detail_id: saleDetailId,
+        quantity: -quantity, // Negativo porque es salida
+        notes: 'Salida por venta'
+    }).returning('*');
+
+    // 4. UPDATE del stock (restar)
+    await trx('current_stock')
+        .where({ supply_id: supplyId })
+        .update({
+            current_quantity: db.raw('current_quantity - ?', [quantity]), // ¡Ojo! db.raw aquí no funciona directamente con trx. Usa trx.raw
+            last_movement_id: movement.id,
+            updated_at: db.fn.now()
+        });
+
+    return movement;
 };

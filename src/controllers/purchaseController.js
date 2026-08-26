@@ -1,5 +1,5 @@
 const purchaseService = require('../services/purchaseService');
-
+const db = require('../database/knex'); 
 
 //create purchases
 exports.createPurchase = async (req, res) => {
