@@ -6,6 +6,7 @@ const productRoutes = require('./routes/productRoutes');
 const supplyRoutes = require('./routes/supplyRoutes');
 const purchaseRoutes = require('./routes/purchaseRoutes');
 const saleRoutes = require('./routes/saleRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
 
 
 const app = express();
@@ -18,6 +19,7 @@ app.use('/api', productRoutes);
 app.use('/api', supplyRoutes);
 app.use('/api', purchaseRoutes);
 app.use('/api', saleRoutes);
+app.use('/api', supplierRoutes);
 
 // Middleware de errores (opcional)
 app.use((err, req, res, next) => {
