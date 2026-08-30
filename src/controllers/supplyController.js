@@ -1,26 +1,5 @@
 const supplyService = require('../services/supplyService');
 
-// --- CATEGORÍAS ---
-exports.createSupplyCategory = async (req, res) => {
-    try {
-        const { name, description } = req.body;
-        const result = await supplyService.createCategory(name, description);
-        res.status(201).json(result);
-    } catch (error) {
-        console.error('Error en categoría:', error.message);
-        res.status(400).json({ error: error.message });
-    }
-};
-
-exports.getSupplyCategories = async (req, res) => {
-    try {
-        const categories = await supplyService.listCategories();
-        res.json(categories);
-    } catch (error) {
-        res.status(500).json({ error: 'Error al obtener categorías' });
-    }
-};
-
 // --- INSUMOS ---
 exports.createSupply = async (req, res) => {
     try {

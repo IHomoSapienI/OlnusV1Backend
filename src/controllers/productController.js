@@ -1,22 +1,5 @@
 const db = require('../database/knex');
 
-// Controlador para crear categoría
-exports.createCategory = async (req, res) => {
-    try {
-        const { name, description } = req.body;
-        if (!name) {
-            return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
-        }
-        const [newCategory] = await db('product_categories')
-            .insert({ name, description: description || null })
-            .returning('*');
-        res.status(201).json(newCategory);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Error al crear la categoría' });
-    }
-};
-
 // Controlador para crear producto
 exports.createProduct = async (req, res) => {
     try {

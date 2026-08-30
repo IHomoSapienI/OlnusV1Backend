@@ -1,15 +1,5 @@
 const db = require('../database/knex');
 
-// --- CATEGORÍAS DE INSUMOS ---
-exports.insertSupplyCategory = async (categoryData) => {
-    const [category] = await db('supply_categories').insert(categoryData).returning('*');
-    return category;
-};
-
-exports.getAllSupplyCategories = async () => {
-    return await db('supply_categories').select('*').orderBy('name');
-};
-
 // --- INSUMOS ---
 exports.insertSupply = async (supplyData) => {
     const [supply] = await db('supplies').insert(supplyData).returning('*');
