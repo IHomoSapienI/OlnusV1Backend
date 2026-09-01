@@ -92,3 +92,21 @@ exports.getSuppliesBySupplier = async (req, res) => {
         res.status(500).json({ error: 'Error al obtener insumos del proveedor' });
     }
 };
+
+// DELETE /api/suppliers/:supplierId/supplies/:supplyId
+exports.deleteSupplierSupply = async (req, res) => {
+    try {
+        const db = require('../database/knex');
+        await db('supplier_supplies')
+            .where({
+                supplier_id: req.params.supplierId,
+                supply_id: req.params.supplyId
+            })
+            .delete();
+
+        res.status(200).json({ message: 'Insumo eliminado del proveedor' });
+    } catch (error) {
+        console.error('Error deleting supplier supply:', error);
+        res.status(500).json({ error: 'Error al eliminar insumo del proveedor' });
+    }
+};

@@ -1,8 +1,8 @@
+// purchaseService.js
 const db = require('../database/knex');
 const purchaseRepo = require('../repositories/purchaseRepository');
 const inventoryService = require('./inventoryService');
 
-// Create purchase transaction
 exports.createPurchase = async (purchaseData, detailsData, userEmail) => {
     try {
         if (!purchaseData || !detailsData || detailsData.length === 0) {
@@ -25,7 +25,7 @@ exports.createPurchase = async (purchaseData, detailsData, userEmail) => {
                 status: 'effective'
             });
 
-            // 3. Insert details and update stock
+            // 3. Insert details + автоматически связать провайдера с инсумами
             for (let item of detailsData) {
                 const detail = await purchaseRepo.insertPurchaseDetail(trx, {
                     purchase_id: purchase.id,
@@ -34,6 +34,15 @@ exports.createPurchase = async (purchaseData, detailsData, userEmail) => {
                     unit_cost: item.unit_cost,
                     subtotal: item.quantity * item.unit_cost
                 });
+
+                // Автоматически: Регистрируем, что этот провайдер продаёт этот инсум
+                await trx('supplier_supplies')
+                    .insert({
+                        supplier_id: purchaseData.supplier_id,
+                        supply_id: item.supply_id
+                    })
+                    .onConflict(['supplier_id', 'supply_id'])
+                    .ignore(); // Если уже есть связь, не дублируем
 
                 // Aumentar stock de insumo
                 await inventoryService.addStock(
@@ -49,7 +58,7 @@ exports.createPurchase = async (purchaseData, detailsData, userEmail) => {
             return purchase;
         });
     } catch (error) {
-        if (error.code === '23505') throw new Error('Ya existe una compra con ese número');
+        if (error.code === '23505') throw new Error('Ya existe una compra с этим номером');
         throw error;
     }
 };
