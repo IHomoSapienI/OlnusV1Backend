@@ -1,34 +1,31 @@
-const db = require('../database/knex');
+const productService = require('../services/productService');
 
-// Controlador para crear producto
+// POST /api/products
 exports.createProduct = async (req, res) => {
     try {
         const { name, product_category_id, sale_price } = req.body;
+
+        // Validaciones
         if (!name || !product_category_id) {
-            return res.status(400).json({ error: 'El nombre y la categoría del producto son obligatorios' });
+            return res.status(400).json({ error: 'Nombre y categoría obligatorios' });
         }
-        const [newProduct] = await db('products')
-            .insert({ name, product_category_id, sale_price: sale_price || 0 })
-            .returning('*');
-        res.status(201).json(newProduct);
+
+        const result = await productService.createProduct(name, product_category_id, sale_price);
+
+        res.status(201).json({ message: 'Producto creado exitosamente', data: result });
     } catch (error) {
-        console.error(error);
-        if (error.code === '23505') {
-            return res.status(400).json({ error: 'Ya existe un producto con ese nombre' });
-        }
-        res.status(500).json({ error: 'Error al crear el producto' });
+        console.error('Error en producto:', error);
+        res.status(500).json({ error: error.message });
     }
 };
 
-// Controlador para listar productos
-exports.getProducts = async (req, res) => {
+// GET /api/products
+exports.getAllProducts = async (req, res) => {
     try {
-        const products = await db('products')
-            .join('product_categories', 'products.product_category_id', 'product_categories.id')
-            .select('products.*', 'product_categories.name as category_name');
-        res.json(products);
+        const result = await productService.getAllProducts();
+        res.json(result);
     } catch (error) {
-        console.error(error);
+        console.error('Error listing products:', error);
         res.status(500).json({ error: 'Error al obtener productos' });
     }
 };
