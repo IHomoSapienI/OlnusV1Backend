@@ -1,46 +1,42 @@
 const purchaseService = require('../services/purchaseService');
-const db = require('../database/knex'); 
 
-//create purchases
+// POST /api/purchases
 exports.createPurchase = async (req, res) => {
     try {
         const { user_email, purchase_data, details } = req.body;
 
-        // Validación básica
-        if (!purchase_data || !details || details.length === 0) {
+        // Validación
+        if (!user_email || !purchase_data || !details || details.length === 0) {
             return res.status(400).json({ error: 'Datos de compra inválidos' });
         }
 
-        const result = await purchaseService.createPurchaseTransaction(purchase_data, details, user_email);
+        const result = await purchaseService.createPurchase(purchase_data, details, user_email);
 
         res.status(201).json({ message: 'Compra registrada exitosamente', data: result });
-
     } catch (error) {
         console.error('Error en compra:', error);
         res.status(500).json({ error: error.message });
     }
-
 };
 
-
-//get purchases
-
-exports.getPurchases = async (req, res) => {
+// GET /api/purchases
+exports.getAllPurchases = async (req, res) => {
     try {
-        // Hacemos un JOIN simple para traer el nombre del proveedor y usuario
-        const purchases = await db('purchases')
-            .join('suppliers', 'purchases.supplier_id', 'suppliers.id')
-            .join('users', 'purchases.user_id', 'users.id')
-            .select(
-                'purchases.*',
-                'suppliers.name as supplier_name',
-                'users.email as user_email'
-            )
-            .orderBy('purchases.created_at', 'desc');
-            
-        res.json(purchases);
+        const result = await purchaseService.getAllPurchases();
+        res.json(result);
     } catch (error) {
-        console.error('Error listando compras:', error);
+        console.error('Error listing purchases:', error);
         res.status(500).json({ error: 'Error al obtener las compras' });
+    }
+};
+
+// GET /api/purchases/:id
+exports.getPurchaseDetails = async (req, res) => {
+    try {
+        const result = await purchaseService.getPurchaseDetails(req.params.id);
+        res.json(result);
+    } catch (error) {
+        console.error('Error getting purchase details:', error);
+        res.status(500).json({ error: 'Error al obtener detalles de la compra' });
     }
 };
