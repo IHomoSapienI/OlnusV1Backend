@@ -1,17 +1,36 @@
+// const express = require('express');
+// const router = express.Router();
+// const inventoryController = require('../controllers/inventoryController');
+
+// // obtener todo el stock actual
+// router.get('/inventory', inventoryController.getAllStock);
+
+// // obtener todos los movimientos de inventario
+// router.get('/inventory/movements', inventoryController.getAllMovements);
+
+// // obtener movimientos por item 
+// router.get('/inventory/movements/:itemType/:itemId', inventoryController.getMovementsByItem);
+
+// // COTROLADOR PARA AJUSTAR EL STOCK (MANUALMENTE)
+// router.post('/inventory/adjust', inventoryController.adjustStock);
+
+// module.exports = router;
+
+// inventoryRoutes.js
 const express = require('express');
 const router = express.Router();
 const inventoryController = require('../controllers/inventoryController');
 
-// Получить весь запас (insumos + продукты)
+// Obtener todo el stock
 router.get('/inventory', inventoryController.getAllStock);
 
-// Получить историю движений
+// Obtener el historial de movimientos
 router.get('/inventory/movements', inventoryController.getAllMovements);
 
-// Получить историю движений по предмету
-router.get('/inventory/movements/:itemType/:itemId', inventoryController.getMovementsByItem);
+// Obtener el historial de movimientos por insumo
+router.get('/inventory/movements/:supplyId', inventoryController.getMovementsByItem);
 
-// Аджаст запас (вручную)
+// Ajustar el stock manualmente
 router.post('/inventory/adjust', inventoryController.adjustStock);
 
 module.exports = router;

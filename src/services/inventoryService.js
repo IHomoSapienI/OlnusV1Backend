@@ -2,18 +2,13 @@
 const db = require('../database/knex');
 const inventoryRepo = require('../repositories/inventoryRepository');
 
-// ================================================
-// 1. AGREGAR STOCK (Entrada por compra)
-// ================================================
-exports.addStock = async (trx, itemType, itemId, quantity, purchaseDetailId, movementType = 'PURCHASE') => {
-    // 1. Buscar el ID del tipo de movimiento
+// AGREGAR STOCK (Entrada por compra)
+exports.addStock = async (trx, supplyId, quantity, purchaseDetailId, movementType = 'PURCHASE') => {
     const movementTypeRow = await trx('movement_types').where({ name: movementType }).first();
     if (!movementTypeRow) throw new Error(`Tipo de movimiento ${movementType} no encontrado`);
 
-    // 2. Insertar el movimiento de inventario (cantidad positiva)
     const [movement] = await trx('inventory_movements').insert({
-        item_type: itemType,
-        item_id: itemId,
+        supply_id: supplyId,
         movement_type_id: movementTypeRow.id,
         purchase_detail_id: purchaseDetailId,
         sale_detail_id: null,
@@ -21,48 +16,40 @@ exports.addStock = async (trx, itemType, itemId, quantity, purchaseDetailId, mov
         notes: 'Entrada por compra'
     }).returning('*');
 
-    // 3. UPSERT en current_stock (Si existe, actualiza. Si no, crea la fila)
     await trx.raw(`
-        INSERT INTO current_stock (id, item_type, item_id, current_quantity, last_movement_id, updated_at)
-        VALUES (gen_random_uuid(), ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT (item_type, item_id) 
+        INSERT INTO current_stock (id, supply_id, current_quantity, last_movement_id, updated_at)
+        VALUES (gen_random_uuid(), ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT (supply_id) 
         DO UPDATE SET 
             current_quantity = current_stock.current_quantity + EXCLUDED.current_quantity,
             last_movement_id = EXCLUDED.last_movement_id,
             updated_at = CURRENT_TIMESTAMP
-    `, [itemType, itemId, quantity, movement.id]);
+    `, [supplyId, quantity, movement.id]);
 
     return movement;
 };
 
-// ================================================
-// 2. QUITAR STOCK (Salida por venta)
-// ================================================
-exports.removeStock = async (trx, itemType, itemId, quantity, saleDetailId, movementType = 'SALE') => {
-    // 1. Verificar stock actual
-    const stockRow = await trx('current_stock').where({ item_type: itemType, item_id: itemId }).first();
+// QUITAR STOCK (Salida por venta)
+exports.removeStock = async (trx, supplyId, quantity, saleDetailId, movementType = 'SALE') => {
+    const stockRow = await trx('current_stock').where({ supply_id: supplyId }).first();
     if (!stockRow || stockRow.current_quantity < quantity) {
-        throw new Error(`Stock insuficiente del ${itemType === 'supply' ? 'insumo' : 'producto'} ${itemId}. Necesita ${quantity} y hay ${stockRow ? stockRow.current_quantity : 0}`);
+        throw new Error(`Stock insuficiente del insumo ${supplyId}. Necesita ${quantity} y hay ${stockRow ? stockRow.current_quantity : 0}`);
     }
 
-    // 2. Buscar el tipo de movimiento
     const movementTypeRow = await trx('movement_types').where({ name: movementType }).first();
     if (!movementTypeRow) throw new Error(`Tipo de movimiento ${movementType} no encontrado`);
 
-    // 3. Insertar el movimiento (cantidad NEGATIVA)
     const [movement] = await trx('inventory_movements').insert({
-        item_type: itemType,
-        item_id: itemId,
+        supply_id: supplyId,
         movement_type_id: movementTypeRow.id,
         purchase_detail_id: null,
         sale_detail_id: saleDetailId,
-        quantity: -quantity, // Negativo porque es salida
+        quantity: -quantity,
         notes: 'Salida por venta'
     }).returning('*');
 
-    // 4. UPDATE del stock (restar) - Usando trx.raw
     await trx('current_stock')
-        .where({ item_type: itemType, item_id: itemId })
+        .where({ supply_id: supplyId })
         .update({
             current_quantity: trx.raw('current_quantity - ?', [quantity]),
             last_movement_id: movement.id,
@@ -72,55 +59,44 @@ exports.removeStock = async (trx, itemType, itemId, quantity, saleDetailId, move
     return movement;
 };
 
-// ================================================
-// 3. ПОЛУЧИТЬ ВЕСЬ ЗАПАС (Insumos + Продукты)
-// ================================================
+// Obtener todo el stock
 exports.getAllStock = async () => {
-    const supplies = await inventoryRepo.getAllCurrentStock();
-    const products = await inventoryRepo.getAllCurrentStockProducts();
-    return { supplies, products };
+    return await inventoryRepo.getAllCurrentStock();
 };
 
-// ================================================
-// 4. ПОЛУЧИТЬ ИСТОРИЮ ДВИЖЕНИЙ
-// ================================================
+// Obtener el historial de movimientos
 exports.getAllMovements = async () => {
     return await inventoryRepo.getAllMovements();
 };
 
-// ================================================
-// 5. ПОЛУЧИТЬ ИСТОРИЮ ДВИЖЕНИЙ ПО ПРЕДМЕТУ
-// ================================================
-exports.getMovementsByItem = async (itemType, itemId) => {
-    if (!itemType || !itemId) throw new Error('Item type и item ID обязательны');
-    return await inventoryRepo.getMovementsByItem(itemType, itemId);
+// Obtener el historial de movimientos por insumo
+exports.getMovementsByItem = async (supplyId) => {
+    if (!supplyId) throw new Error('ID del insumo obligatorio');
+    return await inventoryRepo.getMovementsByItem(supplyId);
 };
 
-// ================================================
-// 6. АДЖАСТ ЗАПАС (Вручную)
-// ================================================
-exports.adjustStock = async (itemType, itemId, quantity, notes) => {
-    if (!itemType || !itemId || !quantity) throw new Error('Данные для аджаста обязательны');
+// Ajustar el stock manualmente
+exports.adjustStock = async (supplyId, quantity, notes) => {
+    if (!supplyId || !quantity) throw new Error('ID del insumo y cantidad obligatorios');
 
-    // 1. Проверяем текущий запас
-    const current = await inventoryRepo.getCurrentStock(itemType, itemId);
+    // 1. Obtener el stock actual
+    const current = await inventoryRepo.getCurrentStock(supplyId);
     if (!current) {
-        throw new Error('Запас для этого предмета не найден');
+        throw new Error('Stock no encontrado para este insumo');
     }
 
-    // 2. Если уменьшение, проверяем, что хватает
+    // 2. Si se reduce, verificar que hay suficiente
     if (quantity < 0 && current.current_quantity < Math.abs(quantity)) {
-        throw new Error('Недостаточно запаса для уменьшения');
+        throw new Error('Stock insuficiente para reducir');
     }
 
-    // 3. Проверяем тип движения
+    // 3. Buscar el tipo de movimiento
     const movementType = await db('movement_types').where({ name: 'ADJUSTMENT' }).first();
-    if (!movementType) throw new Error('Tipo de movimiento ADJUSTMENT не найден');
+    if (!movementType) throw new Error('Tipo de movimiento ADJUSTMENT no encontrado');
 
-    // 4. Вставляем движение
+    // 4. Insertar el movimiento
     const [movement] = await db('inventory_movements').insert({
-        item_type: itemType,
-        item_id: itemId,
+        supply_id: supplyId,
         movement_type_id: movementType.id,
         purchase_detail_id: null,
         sale_detail_id: null,
@@ -128,9 +104,9 @@ exports.adjustStock = async (itemType, itemId, quantity, notes) => {
         notes: notes || 'Ajuste manual'
     }).returning('*');
 
-    // 5. Обновляем запас
+    // 5. Update del stock
     await db('current_stock')
-        .where({ item_type: itemType, item_id: itemId })
+        .where({ supply_id: supplyId })
         .update({
             current_quantity: db.raw('current_quantity + ?', [quantity]),
             last_movement_id: movement.id,
